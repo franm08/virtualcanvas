@@ -24,7 +24,7 @@ buttons = [
     {'pos': (10, 60), 'size': (60, 60), 'color': (255, 0, 255), 'label': 'Purple'},
     {'pos': (80, 60), 'size': (60, 60), 'color': (0, 255, 0), 'label': 'Green'},
     {'pos': (150, 60), 'size': (60, 60), 'color': (0, 255, 255), 'label': 'Yellow'},
-    {'pos': (220, 60), 'size': (60, 60), 'color': (255, 0, 0), 'label': 'Red'},
+    {'pos': (220, 60), 'size': (60, 60), 'color': (255, 0, 0), 'label': 'Blue'},
     {'pos': (290, 60), 'size': (60, 60), 'color': (255, 255, 255), 'label': 'Eraser'},
     {'pos': (360, 60), 'size': (60, 60), 'color': (0, 0, 0), 'label': 'Clear'},
     {'pos': (430, 60), 'size': (60, 60), 'color': (200, 200, 200), 'label': '+'},
