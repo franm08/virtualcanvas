@@ -2,6 +2,7 @@ import cv2
 import mediapipe as mp
 import datetime
 import random
+import numpy as np
 
 # Setup MediaPipe
 mp_hands = mp.solutions.hands
@@ -15,11 +16,14 @@ drawing_active = True
 brush_color = (255, 0, 255)
 brush_color_name = "Purple"
 brush_size = 8
-brush_type = "Circle"  # Circle, Square, Spray
-shape_mode = "Free"    # Free, Line, Rect, CircleS
+brush_type = "Rainbow"
+shape_mode = "Free"
 shape_start = None
+rainbow_hue = 0
+show_tooltip = ""
+grid_enabled = True
 
-# Button layout
+# Buttons
 buttons = [
     {'pos': (10, 60), 'size': (60, 60), 'color': (255, 0, 255), 'label': 'Purple'},
     {'pos': (80, 60), 'size': (60, 60), 'color': (0, 255, 0), 'label': 'Green'},
@@ -29,15 +33,16 @@ buttons = [
     {'pos': (360, 60), 'size': (60, 60), 'color': (0, 0, 0), 'label': 'Clear'},
     {'pos': (430, 60), 'size': (60, 60), 'color': (200, 200, 200), 'label': '+'},
     {'pos': (500, 60), 'size': (60, 60), 'color': (200, 200, 200), 'label': '-'},
-    {'pos': (570, 60), 'size': (100, 60), 'color': (150, 150, 150), 'label': 'Draw'},
-    {'pos': (680, 60), 'size': (100, 60), 'color': (100, 255, 100), 'label': 'Save'},
+    {'pos': (570, 60), 'size': (100, 60), 'color': (100, 255, 100), 'label': 'Save'},
+    {'pos': (680, 60), 'size': (100, 60), 'color': (150, 150, 150), 'label': 'Draw'},
     {'pos': (10, 130), 'size': (100, 40), 'color': (100, 100, 255), 'label': 'Circle'},
     {'pos': (120, 130), 'size': (100, 40), 'color': (100, 100, 255), 'label': 'Square'},
     {'pos': (230, 130), 'size': (100, 40), 'color': (100, 100, 255), 'label': 'Spray'},
-    {'pos': (340, 130), 'size': (80, 40), 'color': (255, 100, 100), 'label': 'Line'},
-    {'pos': (430, 130), 'size': (100, 40), 'color': (255, 100, 100), 'label': 'Rect'},
-    {'pos': (540, 130), 'size': (100, 40), 'color': (255, 100, 100), 'label': 'CircleS'},
-    {'pos': (650, 130), 'size': (100, 40), 'color': (150, 150, 255), 'label': 'Free'},
+    {'pos': (340, 130), 'size': (100, 40), 'color': (255, 200, 100), 'label': 'Rainbow'},
+    {'pos': (450, 130), 'size': (80, 40), 'color': (255, 100, 100), 'label': 'Line'},
+    {'pos': (540, 130), 'size': (100, 40), 'color': (255, 100, 100), 'label': 'Rect'},
+    {'pos': (650, 130), 'size': (100, 40), 'color': (255, 100, 100), 'label': 'CircleS'},
+    {'pos': (760, 130), 'size': (100, 40), 'color': (150, 150, 255), 'label': 'Free'},
 ]
 
 def is_inside_button(finger_pos, button):
@@ -56,7 +61,13 @@ def is_fist(landmarks):
                 fingers_folded += 1
     return fingers_folded == 4
 
-def draw_brush(canvas, pos, color, size, style):
+def get_rainbow_color(hue):
+    h = hue % 180
+    hsv = np.uint8([[[h, 255, 255]]])
+    bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)[0][0]
+    return int(bgr[0]), int(bgr[1]), int(bgr[2])
+
+def draw_brush(canvas, pos, color, size, style, hue):
     if style == "Circle":
         cv2.circle(canvas, pos, size, color, -1)
     elif style == "Square":
@@ -66,9 +77,12 @@ def draw_brush(canvas, pos, color, size, style):
         for _ in range(20):
             dx = random.randint(-size, size)
             dy = random.randint(-size, size)
-            if dx*dx + dy*dy <= size*size:
-                cv2.circle(canvas, (pos[0]+dx, pos[1]+dy), 1, color, -1)
-
+            if dx * dx + dy * dy <= size * size:
+                cv2.circle(canvas, (pos[0] + dx, pos[1] + dy), 1, color, -1)
+    elif style == "Rainbow":
+        color = get_rainbow_color(hue)
+        cv2.circle(canvas, pos, size, color, -1)
+        
 while cap.isOpened():
     success, frame = cap.read()
     if not success:
@@ -77,13 +91,14 @@ while cap.isOpened():
     frame = cv2.flip(frame, 1)
     h, w, _ = frame.shape
     if canvas is None:
-        canvas = frame.copy() * 0
+        canvas = np.zeros_like(frame)
 
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = hands.process(rgb)
 
     index_pos = None
     landmarks = {}
+    rainbow_hue = (rainbow_hue + 2) % 180
 
     if results.multi_hand_landmarks:
         for handLms in results.multi_hand_landmarks:
@@ -95,7 +110,7 @@ while cap.isOpened():
 
             if drawing_enabled and drawing_active and index_pos and index_pos[1] > 180:
                 if shape_mode == "Free":
-                    draw_brush(canvas, index_pos, brush_color, brush_size, brush_type)
+                    draw_brush(canvas, index_pos, brush_color, brush_size, brush_type, rainbow_hue)
                 elif shape_start is None:
                     shape_start = index_pos
                 else:
@@ -104,16 +119,18 @@ while cap.isOpened():
                     elif shape_mode == "Rect":
                         cv2.rectangle(canvas, shape_start, index_pos, brush_color, brush_size)
                     elif shape_mode == "CircleS":
-                        radius = int(((shape_start[0]-index_pos[0])**2 + (shape_start[1]-index_pos[1])**2)**0.5)
+                        radius = int(((shape_start[0] - index_pos[0]) ** 2 + (shape_start[1] - index_pos[1]) ** 2) ** 0.5)
                         cv2.circle(canvas, shape_start, radius, brush_color, brush_size)
                     shape_start = None
 
+    show_tooltip = ""
     if index_pos:
         for btn in buttons:
             if is_inside_button(index_pos, btn):
                 label = btn['label']
+                show_tooltip = f"{label} Tool"
                 if label == 'Clear':
-                    canvas = frame.copy() * 0
+                    canvas = np.zeros_like(frame)
                 elif label == '+':
                     brush_size = min(brush_size + 2, 50)
                 elif label == '-':
@@ -124,12 +141,13 @@ while cap.isOpened():
                     brush_color = (255, 255, 255)
                     brush_color_name = "Eraser"
                     brush_size = 30
+                    brush_type = "Circle"
                 elif label == 'Save':
                     filename = f"drawing_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
                     output = cv2.addWeighted(frame, 0.5, canvas, 1, 0)
                     cv2.imwrite(filename, output)
                     print(f"📸 Saved: {filename}")
-                elif label in ["Circle", "Square", "Spray"]:
+                elif label in ["Circle", "Square", "Spray", "Rainbow"]:
                     brush_type = label
                 elif label in ["Line", "Rect", "CircleS", "Free"]:
                     shape_mode = label
@@ -139,6 +157,13 @@ while cap.isOpened():
                     brush_color_name = label
                     brush_size = 8
 
+    # Draw grid
+    if grid_enabled:
+        for i in range(0, w, 60):
+            cv2.line(frame, (i, 0), (i, h), (200, 200, 200), 1)
+        for i in range(0, h, 60):
+            cv2.line(frame, (0, i), (w, i), (200, 200, 200), 1)
+
     # Draw UI buttons
     for btn in buttons:
         x, y = btn['pos']
@@ -146,14 +171,20 @@ while cap.isOpened():
         color = btn['color']
         cv2.rectangle(frame, (x, y), (x + w_, y + h_), color, -1)
         cv2.rectangle(frame, (x, y), (x + w_, y + h_), (0, 0, 0), 2)
+        brightness = sum(color) / 3
+        text_color = (255, 255, 255) if brightness < 100 else (0, 0, 0)
         cv2.putText(frame, btn['label'], (x + 5, y + h_ - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, text_color, 2)
+
+    # Tooltip display
+    if show_tooltip:
+        cv2.putText(frame, show_tooltip, (10, h - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (50, 255, 50), 2)
 
     combined = cv2.addWeighted(frame, 1, canvas, 1, 0)
     status = f"{brush_type} Brush | Size: {brush_size}px | Shape: {shape_mode} | Drawing: {'ON' if drawing_enabled and drawing_active else 'OFF'}"
     cv2.putText(combined, status, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, brush_color, 2)
 
-    cv2.imshow("🖐️ Finger Paint Pro", combined)
+    cv2.imshow("🖐️ Virtual Canvas Pro", combined)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
